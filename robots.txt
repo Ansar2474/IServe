@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+# No Sitemap line yet: set siteUrl in data/site.json, then rebuild.
