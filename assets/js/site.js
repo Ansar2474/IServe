@@ -26,9 +26,29 @@
   // Success is reported only when the database returns a booking reference.
   const ERR = { invalid_phone: 'Enter a valid Pakistani mobile number.', invalid_name: 'Enter your name.', invalid_city: 'Choose a city we serve.', invalid_service: 'Choose an available service.',
     invalid_date: 'Choose a date from today up to six months ahead.', invalid_time: 'Choose a valid time.', too_long: 'Your description is too long.', rate_limited: 'Too many requests from this number. Please call or use WhatsApp.' };
+  const scriptPost = (u, p) => {
+    const b = new URLSearchParams();
+    ['name', 'phone', 'city', 'category', 'specific', 'problem', 'date', 'time'].forEach((k) => {
+      const v = k === 'specific' ? p.item : p[k];
+      if (v) b.set(k, v);
+    });
+    const send = (o = {}) => fetch(u, { method: 'POST', keepalive: true, body: b, ...o });
+    return send().then((r) => {
+      if (r.type === 'opaque') return { saved: true, ref: '' };
+      return r.text().then((t) => {
+        let j = null; try { j = t ? JSON.parse(t) : null; } catch (e) {}
+        if (!r.ok || (j && j.ok === false)) { const e = new Error(ERR[j && j.error] || 'The request could not be saved.'); e.known = !!ERR[j && j.error]; throw e; }
+        return { saved: true, ref: (j && j.ref) || '' };
+      });
+    }).catch((e) => {
+      if (e && e.name === 'TypeError') return send({ mode: 'no-cors' }).then(() => ({ saved: true, ref: '' }));
+      throw e;
+    });
+  };
   const sheetPost = (p, ref) => fetch(C.sheetsUrl, { method: 'POST', keepalive: true, headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({ token: p.token, ref, name: p.name, phone: p.phone, city: p.city, service: p.category, serviceName: (C.services.find((x) => x.slug === p.category) || {}).name || '', item: p.item, problem: p.problem, date: p.date, time: p.time, source: location.pathname }) }).then((r) => r.json());
-  function submitBooking(p) {
+  function submitBooking(p, endpoint) {
+    if (endpoint) return scriptPost(endpoint, p);
     if (C.bookingMode === 'dev') {
       const list = store.get('iserve_dev_bookings'); list.push({ ...p, at: new Date().toISOString() });
       return Promise.resolve({ saved: false, localOnly: store.set('iserve_dev_bookings', list) });
@@ -91,7 +111,7 @@
       if (first) { g(first).focus(); return; }
       if (g('website').value) return; // honeypot
       sb.disabled = true; sb.textContent = 'Sending...';
-      submitBooking(p).then((r) => {
+      submitBooking(p, f.dataset.bookingEndpoint || f.getAttribute('action') || '').then((r) => {
         if (r.saved) { try { sessionStorage.setItem('iserve_submitted', '1'); sessionStorage.setItem('iserve_ref', r.ref); } catch (x) {} location.href = 'thank-you.html'; return; }
         sb.disabled = false; sb.textContent = 'Request booking';
         out.className = 'mt-4 rounded-lg border border-orange bg-orange/10 p-4 text-sm text-ink';
